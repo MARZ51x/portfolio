@@ -1,0 +1,21 @@
+{
+  "name": "acamar-baltazar-portfolio",
+  "version": "1.0.0",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "build:images": "node scripts/build-images.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "sharp": "^0.35.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

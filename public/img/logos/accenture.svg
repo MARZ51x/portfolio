@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="A logo">
+  <rect width="100" height="100" rx="24" fill="#5b3a8c"/>
+  <text x="50" y="50" dominant-baseline="central" text-anchor="middle"
+        font-family="Georgia, 'Times New Roman', serif" font-weight="600"
+        font-size="46" letter-spacing="0.5" fill="#f3efe6">A</text>
+</svg>
