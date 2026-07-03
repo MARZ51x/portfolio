@@ -1,15 +1,49 @@
 /* Progressive enhancement only — content is fully visible and readable
-   without JS; this file adds the scroll-driven motion on top. */
+   without JS; this file adds scroll-driven motion, theming, the command
+   palette, and the live GitHub section on top. */
 (() => {
   const docEl = document.documentElement;
   docEl.classList.add('js');
 
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  /* ----- reveal on scroll, with per-child stagger ----- */
-  document.querySelectorAll('[data-stagger]').forEach((group) => {
+  /* ================= theme toggle ================= */
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+  const syncThemeMeta = () => {
+    if (themeMeta) themeMeta.content = docEl.dataset.theme === 'dark' ? '#16130f' : '#f3efe6';
+  };
+  syncThemeMeta();
+
+  let themeAnimTimer;
+  const setTheme = (t) => {
+    docEl.classList.add('theme-anim');
+    clearTimeout(themeAnimTimer);
+    themeAnimTimer = setTimeout(() => docEl.classList.remove('theme-anim'), 400);
+    if (t === 'dark') docEl.dataset.theme = 'dark';
+    else delete docEl.dataset.theme;
+    try { localStorage.setItem('theme', t); } catch (e) {}
+    syncThemeMeta();
+  };
+  const toggleTheme = () => setTheme(docEl.dataset.theme === 'dark' ? 'light' : 'dark');
+  const themeBtn = document.querySelector('.theme-toggle');
+  if (themeBtn) themeBtn.addEventListener('click', toggleTheme);
+
+  /* ================= toast ================= */
+  const toast = document.querySelector('.toast');
+  let toastTimer;
+  const showToast = (msg) => {
+    if (!toast) return;
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 1800);
+  };
+
+  /* ================= reveal on scroll, with per-child stagger ================= */
+  const setStaggerIndexes = (group) => {
     [...group.children].forEach((child, i) => child.style.setProperty('--i', i));
-  });
+  };
+  document.querySelectorAll('[data-stagger]').forEach(setStaggerIndexes);
 
   const io = new IntersectionObserver((entries) => {
     for (const e of entries) {
@@ -18,7 +52,29 @@
   }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
   document.querySelectorAll('[data-reveal], [data-stagger]').forEach((el) => io.observe(el));
 
-  /* ----- active nav link ----- */
+  /* ================= animated count-up stats ================= */
+  const counters = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      counters.unobserve(e.target);
+      const el = e.target;
+      const end = parseFloat(el.dataset.count);
+      const suffix = el.dataset.suffix || '';
+      if (reduceMotion || !isFinite(end)) { el.textContent = end + suffix; continue; }
+      const t0 = performance.now();
+      const dur = 1300;
+      const tick = (t) => {
+        const p = Math.min((t - t0) / dur, 1);
+        const eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = Math.round(end * eased) + suffix;
+        if (p < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }
+  }, { threshold: 0.6 });
+  document.querySelectorAll('.stat-num').forEach((el) => counters.observe(el));
+
+  /* ================= active nav link ================= */
   const links = [...document.querySelectorAll('.nav a')];
   const map = new Map(links.map((a) => [a.getAttribute('href').slice(1), a]));
   const spy = new IntersectionObserver((entries) => {
@@ -33,7 +89,148 @@
     const el = document.getElementById(id); if (el) spy.observe(el);
   });
 
-  /* ----- pointer tilt on project cards (fine pointers only) ----- */
+  /* ================= live GitHub repos ================= */
+  const ghSection = document.getElementById('github');
+  const repoGrid = document.querySelector('.repo-grid');
+  if (ghSection && repoGrid && window.fetch) {
+    const LANG_COLORS = {
+      TypeScript: '#3178c6', JavaScript: '#f1e05a', Python: '#3572A5',
+      HTML: '#e34c26', CSS: '#563d7c', Java: '#b07219', C: '#555555',
+      Dart: '#00B4AB', Shell: '#89e051', Dockerfile: '#384d54',
+    };
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g,
+      (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    fetch('https://api.github.com/users/MARZ51x/repos?sort=pushed&per_page=12')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+      .then((repos) => {
+        const top = repos.filter((r) => !r.fork && !r.archived).slice(0, 6);
+        if (!top.length) return;
+        repoGrid.innerHTML = top.map((r) => {
+          const updated = new Date(r.pushed_at)
+            .toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+          const lang = r.language
+            ? `<span class="repo-lang"><i style="background:${LANG_COLORS[r.language] || 'var(--muted)'}"></i>${esc(r.language)}</span>`
+            : '';
+          const stars = r.stargazers_count ? `<span>★ ${r.stargazers_count}</span>` : '';
+          return `<a class="repo" href="${esc(r.html_url)}" target="_blank" rel="noopener">
+            <h3>${esc(r.name)}</h3>
+            <p class="repo-desc">${esc(r.description || 'No description yet.')}</p>
+            <p class="repo-meta">${lang}${stars}<span>Updated ${updated}</span></p>
+          </a>`;
+        }).join('');
+        setStaggerIndexes(repoGrid);
+        ghSection.hidden = false;
+      })
+      .catch(() => { /* API unreachable or rate-limited — section stays hidden */ });
+  }
+
+  /* ================= command palette (Ctrl/Cmd+K) ================= */
+  const palette = document.querySelector('.palette');
+  const paletteBtn = document.querySelector('.palette-btn');
+  if (palette && paletteBtn) {
+    const input = palette.querySelector('.palette-input');
+    const list = palette.querySelector('.palette-list');
+    const isMac = /Mac|iPhone|iPad/i.test(navigator.platform || '');
+    const modKbd = paletteBtn.querySelector('[data-mod]');
+    if (modKbd && isMac) modKbd.textContent = '⌘';
+
+    const goTo = (sel) => {
+      const el = document.querySelector(sel);
+      if (el) el.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' });
+    };
+    const buildCommands = () => {
+      const cmds = [
+        { label: 'Go to About', hint: 'Navigate', run: () => goTo('#about') },
+        { label: 'Go to Skills', hint: 'Navigate', run: () => goTo('#skills') },
+        { label: 'Go to Experience', hint: 'Navigate', run: () => goTo('#experience') },
+        { label: 'Go to Projects', hint: 'Navigate', run: () => goTo('#projects') },
+      ];
+      if (ghSection && !ghSection.hidden) {
+        cmds.push({ label: 'Go to On GitHub', hint: 'Navigate', run: () => goTo('#github') });
+      }
+      cmds.push(
+        { label: 'Go to Certifications & Education', hint: 'Navigate', run: () => goTo('#credentials') },
+        { label: 'Go to Contact', hint: 'Navigate', run: () => goTo('#contact') },
+        { label: 'Toggle light / dark theme', hint: 'Theme', run: toggleTheme },
+        { label: 'Play Sirtet', hint: 'sirtet-two.vercel.app', run: () => window.open('https://sirtet-two.vercel.app', '_blank', 'noopener') },
+        { label: 'Open GitHub profile', hint: 'github.com/MARZ51x', run: () => window.open('https://github.com/MARZ51x', '_blank', 'noopener') },
+        { label: 'Open LinkedIn', hint: 'linkedin.com', run: () => window.open('https://www.linkedin.com/in/marz-baltz/', '_blank', 'noopener') },
+        {
+          label: 'Copy email address', hint: 'acamar.baltazar@gmail.com',
+          run: () => {
+            const email = 'acamar.baltazar@gmail.com';
+            if (navigator.clipboard?.writeText) {
+              navigator.clipboard.writeText(email)
+                .then(() => showToast('Email copied to clipboard'))
+                .catch(() => showToast(email));
+            } else showToast(email);
+          },
+        },
+        { label: 'Send an email', hint: 'mailto', run: () => { location.href = 'mailto:acamar.baltazar@gmail.com'; } },
+      );
+      return cmds;
+    };
+
+    let commands = [];
+    let filtered = [];
+    let selected = 0;
+
+    const render = () => {
+      const q = input.value.trim().toLowerCase();
+      filtered = commands.filter((c) => c.label.toLowerCase().includes(q) || (c.hint || '').toLowerCase().includes(q));
+      selected = Math.min(selected, Math.max(filtered.length - 1, 0));
+      list.innerHTML = filtered.length
+        ? filtered.map((c, i) =>
+            `<li role="option" aria-selected="${i === selected}" data-i="${i}">
+              <span>${c.label}</span><span class="cmd-hint">${c.hint || ''}</span>
+            </li>`).join('')
+        : '<li class="palette-empty" aria-disabled="true">No matching commands</li>';
+    };
+
+    const openPalette = () => {
+      commands = buildCommands();
+      selected = 0;
+      input.value = '';
+      palette.hidden = false;
+      document.body.style.overflow = 'hidden';
+      render();
+      input.focus();
+    };
+    const closePalette = () => {
+      palette.hidden = true;
+      document.body.style.overflow = '';
+    };
+    const runSelected = () => {
+      const cmd = filtered[selected];
+      if (!cmd) return;
+      closePalette();
+      cmd.run();
+    };
+
+    paletteBtn.addEventListener('click', openPalette);
+    palette.querySelector('.palette-backdrop').addEventListener('click', closePalette);
+    input.addEventListener('input', () => { selected = 0; render(); });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); selected = Math.min(selected + 1, filtered.length - 1); render(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); selected = Math.max(selected - 1, 0); render(); }
+      else if (e.key === 'Enter') { e.preventDefault(); runSelected(); }
+    });
+    list.addEventListener('click', (e) => {
+      const li = e.target.closest('li[data-i]');
+      if (li) { selected = +li.dataset.i; runSelected(); }
+    });
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        palette.hidden ? openPalette() : closePalette();
+      } else if (e.key === 'Escape' && !palette.hidden) {
+        closePalette();
+      }
+    });
+  }
+
+  /* ================= pointer tilt on project cards ================= */
   if (!reduceMotion && window.matchMedia('(pointer: fine)').matches) {
     document.querySelectorAll('.project').forEach((card) => {
       card.addEventListener('pointermove', (ev) => {
@@ -50,8 +247,8 @@
     });
   }
 
-  /* ----- scroll-linked frame loop: progress bar, topbar, parallax,
-           velocity-reactive marquee, back-to-top, scroll cue ----- */
+  /* ================= scroll-linked frame loop: progress bar, topbar,
+                       parallax, velocity-reactive marquee ================= */
   const progressBar = document.querySelector('.scroll-progress span');
   const topbar = document.querySelector('.topbar');
   const toTop = document.querySelector('.to-top');
