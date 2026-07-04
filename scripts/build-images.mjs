@@ -22,12 +22,17 @@ const NAVY = '#1c2b4a';
 
 await mkdir(IMG, { recursive: true });
 
-// 1. Optimized full-colour portrait (square, web-sized) + a smaller variant.
+// 1. Optimized full-colour portrait (square, web-sized) + a smaller variant,
+//    each in WebP (preferred) and JPEG (fallback).
 await sharp(SRC).resize(1000, 1000, { fit: 'cover', position: 'top' })
   .jpeg({ quality: 84, mozjpeg: true }).toFile(path.join(IMG, 'portrait.jpg'));
 await sharp(SRC).resize(560, 560, { fit: 'cover', position: 'top' })
   .jpeg({ quality: 82, mozjpeg: true }).toFile(path.join(IMG, 'portrait-sm.jpg'));
-console.log('✓ portrait.jpg, portrait-sm.jpg');
+await sharp(SRC).resize(1000, 1000, { fit: 'cover', position: 'top' })
+  .webp({ quality: 80 }).toFile(path.join(IMG, 'portrait.webp'));
+await sharp(SRC).resize(560, 560, { fit: 'cover', position: 'top' })
+  .webp({ quality: 78 }).toFile(path.join(IMG, 'portrait-sm.webp'));
+console.log('✓ portrait.{jpg,webp}, portrait-sm.{jpg,webp}');
 
 // 2. Editorial warm-monochrome treatment for the About section.
 await sharp(SRC)
@@ -37,7 +42,14 @@ await sharp(SRC)
   .tint('#e7dccb')            // warm paper-toned duotone
   .jpeg({ quality: 84, mozjpeg: true })
   .toFile(path.join(IMG, 'portrait-mono.jpg'));
-console.log('✓ portrait-mono.jpg');
+await sharp(SRC)
+  .resize(900, 900, { fit: 'cover', position: 'top' })
+  .grayscale()
+  .linear(1.08, -10)
+  .tint('#e7dccb')
+  .webp({ quality: 78 })
+  .toFile(path.join(IMG, 'portrait-mono.webp'));
+console.log('✓ portrait-mono.{jpg,webp}');
 
 // 3. Monogram favicon (SVG) — "AB" on navy.
 const favicon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">

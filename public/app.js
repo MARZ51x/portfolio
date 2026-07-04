@@ -28,6 +28,33 @@
   const themeBtn = document.querySelector('.theme-toggle');
   if (themeBtn) themeBtn.addEventListener('click', toggleTheme);
 
+  // follow the system theme live — but only while the user hasn't picked one
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    try { if (localStorage.getItem('theme')) return; } catch (err) {}
+    if (e.matches) docEl.dataset.theme = 'dark';
+    else delete docEl.dataset.theme;
+    syncThemeMeta();
+  });
+
+  /* ================= mobile nav ================= */
+  const menuBtn = document.querySelector('.menu-btn');
+  const mobileNav = document.getElementById('mobile-nav');
+  if (menuBtn && mobileNav) {
+    const setMenu = (open) => {
+      menuBtn.setAttribute('aria-expanded', String(open));
+      menuBtn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+      mobileNav.hidden = !open;
+    };
+    menuBtn.addEventListener('click', () => setMenu(mobileNav.hidden));
+    mobileNav.addEventListener('click', (e) => { if (e.target.closest('a')) setMenu(false); });
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !mobileNav.hidden) { setMenu(false); menuBtn.focus(); }
+    });
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 760 && !mobileNav.hidden) setMenu(false);
+    });
+  }
+
   /* ================= toast ================= */
   const toast = document.querySelector('.toast');
   let toastTimer;
@@ -74,14 +101,19 @@
   }, { threshold: 0.6 });
   document.querySelectorAll('.stat-num').forEach((el) => counters.observe(el));
 
-  /* ================= active nav link ================= */
-  const links = [...document.querySelectorAll('.nav a')];
-  const map = new Map(links.map((a) => [a.getAttribute('href').slice(1), a]));
+  /* ================= active nav link (desktop + mobile) ================= */
+  const links = [...document.querySelectorAll('.nav a, .mobile-nav a[href^="#"]')];
+  const map = new Map();
+  links.forEach((a) => {
+    const id = a.getAttribute('href').slice(1);
+    if (!map.has(id)) map.set(id, []);
+    map.get(id).push(a);
+  });
   const spy = new IntersectionObserver((entries) => {
     for (const e of entries) {
       if (e.isIntersecting && map.has(e.target.id)) {
-        links.forEach((l) => l.classList.remove('active'));
-        map.get(e.target.id).classList.add('active');
+        links.forEach((l) => { l.classList.remove('active'); l.removeAttribute('aria-current'); });
+        map.get(e.target.id).forEach((l) => { l.classList.add('active'); l.setAttribute('aria-current', 'true'); });
       }
     }
   }, { rootMargin: '-45% 0px -50% 0px' });
@@ -182,13 +214,17 @@
       selected = Math.min(selected, Math.max(filtered.length - 1, 0));
       list.innerHTML = filtered.length
         ? filtered.map((c, i) =>
-            `<li role="option" aria-selected="${i === selected}" data-i="${i}">
+            `<li role="option" id="palette-opt-${i}" aria-selected="${i === selected}" data-i="${i}">
               <span>${c.label}</span><span class="cmd-hint">${c.hint || ''}</span>
             </li>`).join('')
         : '<li class="palette-empty" aria-disabled="true">No matching commands</li>';
+      if (filtered.length) input.setAttribute('aria-activedescendant', `palette-opt-${selected}`);
+      else input.removeAttribute('aria-activedescendant');
     };
 
+    let paletteReturnFocus = null;
     const openPalette = () => {
+      paletteReturnFocus = document.activeElement;
       commands = buildCommands();
       selected = 0;
       input.value = '';
@@ -200,6 +236,8 @@
     const closePalette = () => {
       palette.hidden = true;
       document.body.style.overflow = '';
+      if (paletteReturnFocus?.focus) paletteReturnFocus.focus();
+      paletteReturnFocus = null;
     };
     const runSelected = () => {
       const cmd = filtered[selected];
@@ -215,6 +253,7 @@
       if (e.key === 'ArrowDown') { e.preventDefault(); selected = Math.min(selected + 1, filtered.length - 1); render(); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); selected = Math.max(selected - 1, 0); render(); }
       else if (e.key === 'Enter') { e.preventDefault(); runSelected(); }
+      else if (e.key === 'Tab') { e.preventDefault(); } // the input is the dialog's only focusable — trap focus
     });
     list.addEventListener('click', (e) => {
       const li = e.target.closest('li[data-i]');
@@ -279,9 +318,11 @@
     }
 
     // topbar: shadow once scrolled, hide going down / show going up
+    // (never hide while the mobile menu is open)
     if (topbar) {
       topbar.classList.toggle('scrolled', y > 12);
-      if (y < 400 || delta < -2) topbar.classList.remove('hide');
+      const menuOpen = mobileNav && !mobileNav.hidden;
+      if (menuOpen || y < 400 || delta < -2) topbar.classList.remove('hide');
       else if (delta > 2) topbar.classList.add('hide');
     }
 

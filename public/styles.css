@@ -54,6 +54,10 @@
 
 html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
 
+/* off-screen reveal states and decor must never cause sideways scroll;
+   clip (not hidden) so position: sticky keeps working */
+html, body { overflow-x: clip; }
+
 body {
   margin: 0;
   background: var(--paper);
@@ -70,6 +74,15 @@ body {
 .wrap { width: 100%; max-width: var(--wrap); margin-inline: auto; padding-inline: var(--pad); }
 
 a { color: inherit; text-decoration: none; }
+
+a, button { touch-action: manipulation; }
+
+/* consistent, visible keyboard focus everywhere (skill §1: focus-states) —
+   the outline follows each element's own border-radius */
+:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 3px;
+}
 
 img { display: block; max-width: 100%; height: auto; }
 
@@ -124,8 +137,44 @@ section[id] { scroll-margin-top: 84px; }
   border: 1px solid var(--ink); border-radius: 999px; padding: .5rem 1rem; transition: .2s;
 }
 .nav-cta:hover { background: var(--ink); color: var(--paper); }
+
+/* mobile menu button — hidden on desktop, 44px touch target */
+.menu-btn {
+  display: none; place-items: center; width: 44px; height: 44px;
+  border: 1px solid var(--line); border-radius: 50%;
+  background: transparent; color: var(--ink); cursor: pointer; padding: 0;
+  transition: border-color .2s;
+}
+.menu-btn:hover { border-color: var(--ink); }
+.menu-btn .icon-close { display: none; }
+.menu-btn[aria-expanded="true"] .icon-menu { display: none; }
+.menu-btn[aria-expanded="true"] .icon-close { display: block; }
+
+/* mobile nav panel — slides open under the topbar */
+.mobile-nav {
+  display: none; flex-direction: column;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--paper) 96%, transparent);
+  backdrop-filter: saturate(140%) blur(10px);
+  padding: .6rem var(--pad) 1.1rem;
+}
+.mobile-nav a {
+  padding: .8rem .2rem; min-height: 44px; display: flex; align-items: center;
+  font-size: .95rem; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--text-2); border-bottom: 1px solid var(--line);
+}
+.mobile-nav a:last-of-type { border-bottom: 0; }
+.mobile-nav a.active { color: var(--navy); font-weight: 600; }
+.mobile-nav .mobile-nav-cta {
+  margin-top: .6rem; justify-content: center;
+  border: 1px solid var(--ink); border-radius: 999px; color: var(--ink);
+}
+
 @media (max-width: 760px) {
-  .nav { display: none; }
+  .nav, .nav-cta { display: none; }
+  .menu-btn { display: grid; }
+  .mobile-nav:not([hidden]) { display: flex; }
+  .topbar-tools { margin-left: auto; }
 }
 
 /* ---------- shared section scaffolding ---------- */
@@ -251,6 +300,9 @@ section[id] { scroll-margin-top: 84px; }
 .btn-primary:hover { background: var(--navy-2); transform: translateY(-1px); }
 .btn-ghost { border-color: var(--ink); }
 .btn-ghost:hover { background: var(--ink); color: var(--paper); }
+/* immediate pressed feedback (skill §2: press-feedback, §7: scale-feedback) */
+.btn:active, .nav-cta:active, .mobile-nav-cta:active { transform: scale(.97); }
+.theme-toggle:active, .palette-btn:active, .menu-btn:active, .to-top:active { scale: .92; }
 .btn-sm { padding: .55rem 1.1rem; font-size: .88rem; }
 .hero-meta {
   list-style: none; margin: 0; padding: 1.6rem 0 0; border-top: 1px solid var(--line);
@@ -384,12 +436,11 @@ section[id] { scroll-margin-top: 84px; }
 .chips li {
   font-size: .86rem; color: var(--ink); background: var(--card);
   border: 1px solid var(--line); border-radius: 999px; padding: .34rem .8rem;
-  transition: border-color .18s, color .18s, translate .18s var(--ease-out), box-shadow .18s;
+  transition: border-color .18s, color .18s;
 }
-.chips li:hover {
-  border-color: var(--navy); color: var(--navy); translate: 0 -2px;
-  box-shadow: 0 8px 16px -12px rgba(28, 43, 74, .5);
-}
+/* subtle tint only — chips aren't clickable, so no lift/shadow that
+   promises interaction (skill §4: state-clarity) */
+.chips li:hover { border-color: color-mix(in srgb, var(--navy) 55%, var(--line)); color: var(--navy); }
 @media (max-width: 720px) { .skills-grid { grid-template-columns: 1fr; } }
 
 /* ---------- experience ---------- */
@@ -560,6 +611,11 @@ section[id] { scroll-margin-top: 84px; }
   padding: .4rem .55rem; color: var(--muted); transition: border-color .2s, color .2s;
 }
 .palette-btn:hover { border-color: var(--ink); color: var(--ink); }
+/* skill §2: 44px minimum touch targets on touch devices */
+@media (pointer: coarse) {
+  .theme-toggle { width: 44px; height: 44px; }
+  .palette-btn { min-height: 44px; }
+}
 kbd {
   font-family: var(--sans); font-size: .66rem; font-weight: 600; line-height: 1;
   color: var(--muted); background: var(--card);
